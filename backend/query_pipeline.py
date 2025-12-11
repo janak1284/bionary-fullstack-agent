@@ -1,173 +1,145 @@
 import os
 import re
-import sys
-import textwrap
+from datetime import datetime
 import google.generativeai as genai
 
-# ────────────────────────────────────────────────
-# IMPORT RETRIEVER
-# ────────────────────────────────────────────────
-try:
-    import retriever as retriever_module
-except ImportError:
-    print("❌ retriever module not found")
-    sys.exit(1)
+import retriever as retriever_module
+from dotenv import load_dotenv
+load_dotenv()
+
 
 # ────────────────────────────────────────────────
-# GEMINI CONFIG (OPTIONAL FALLBACK)
+# GEMINI CONFIG
 # ────────────────────────────────────────────────
 API_KEY = os.environ.get("GEMINI_API_KEY")
+if not API_KEY:
+    raise RuntimeError("GEMINI_API_KEY not set")
 
-generation_model = None
-if API_KEY:
-    genai.configure(api_key=API_KEY)
-    generation_model = genai.GenerativeModel(
-        "gemini-2.5-flash-preview-09-2025"
-    )
+genai.configure(api_key=API_KEY)
+llm = genai.GenerativeModel("gemini-2.5-flash-preview-09-2025")
+
+CURRENT_YEAR = datetime.now().year
 
 # ────────────────────────────────────────────────
-# FORMATTERS
+# HELPERS
 # ────────────────────────────────────────────────
-def _format_event_list(rows, label):
-    if not rows or rows[0][0] in {"No results", "Connection error"}:
-        return f"No {label} found."
+def extract_year(text):
+    m = re.search(r"(19|20)\d{2}", text)
+    return int(m.group()) if m else None
 
-    output = []
-    output.append(f"📌 {label.title()} ({len(rows)})\n")
 
-    for idx, row in enumerate(rows, start=1):
-        name = row[0]
-        date = row[1]
+def gemini_answer(question, context):
+    """
+    Gemini ADDS language, NOT facts.
+    """
+    prompt = f"""
+You are a university knowledge assistant.
 
-        output.append(
-            f"{idx}. {name}\n"
-            f"   📅 {date}\n"
+You must answer the question ONLY using the information below.
+If information is missing, say so clearly.
+
+Question:
+{question}
+
+Information:
+{context}
+
+Answer clearly, professionally, and naturally.
+"""
+    response = llm.generate_content(prompt)
+    return response.text.strip()
+
+
+# ────────────────────────────────────────────────
+# MAIN AGENT
+# ────────────────────────────────────────────────
+def handle_user_query(question: str) -> str:
+    q = question.lower()
+    year = extract_year(q)
+
+    # =====================================================
+    # EVENTS COUNT
+    # =====================================================
+    if "how many" in q and "event" in q:
+        sql = "SELECT COUNT(*) FROM events"
+        if year:
+            sql += f" WHERE EXTRACT(YEAR FROM date_of_event) = {year}"
+
+        rows = retriever_module.query_relational_db(sql)
+        count = rows[0][0] if rows else 0
+
+        return gemini_answer(
+            question,
+            f"Total events found: {count}"
         )
 
-    return "\n".join(output)
+    # =====================================================
+    # FULL REPORT (FIXED: NO LIMIT)
+    # =====================================================
+    if "report" in q or "summary" in q:
+        sql = """
+        SELECT name_of_event, event_domain, date_of_event, venue, speakers
+        FROM events
+        """
+        if year:
+            sql += f" WHERE EXTRACT(YEAR FROM date_of_event) = {year}"
+        sql += " ORDER BY date_of_event"
 
-def _format_domain_list(rows, label):
-    if not rows or rows[0][0] in {"No results", "Connection error"}:
-        return f"No {label} found."
+        rows = retriever_module.query_relational_db(sql)
 
-    output = [f"📌 {label.title()} ({len(rows)})\n"]
+        if not rows:
+            return "No events found."
 
-    for idx, r in enumerate(rows, start=1):
-        output.append(
-            f"{idx}. {r[0]}\n"
-            f"   🏷 Domain: {r[1]}\n"
-            f"   📅 Date: {r[2]}\n"
+        context = "\n".join(
+            f"{r[0]} | {r[1]} | {r[2]} | {r[3]} | {r[4]}"
+            for r in rows
         )
 
-    return "\n".join(output)
-
-# ────────────────────────────────────────────────
-# MAIN HANDLER
-# ────────────────────────────────────────────────
-def handle_user_query(user_question: str) -> str:
-    q = user_question.lower().strip()
+        return gemini_answer(question, context)
 
     # =====================================================
-    # 1️⃣ LIST ALL EVENTS
+    # ONLINE / OFFLINE / HYBRID
     # =====================================================
-    if (
-        "event" in q
-        and any(w in q for w in {"list", "show", "give", "all"})
-        and not any(w in q for w in {"online", "offline", "hybrid"})
-        and not re.search(r"(19|20)\d{2}", q)
-    ):
-        rows = retriever_module.query_relational_db(
-            """
-            SELECT name_of_event, date_of_event
-            FROM events
-            ORDER BY date_of_event
-            """
-        )
-        return _format_event_list(rows, "all events")
-
-    # =====================================================
-    # 2️⃣ ONLINE / OFFLINE / HYBRID EVENTS
-    # =====================================================
-    for mode in ("online", "offline", "hybrid"):
-        if mode in q and "event" in q:
+    for mode in ["online", "offline", "hybrid"]:
+        if mode in q:
             rows = retriever_module.query_relational_db(
                 f"""
                 SELECT name_of_event, date_of_event
                 FROM events
-                WHERE LOWER(mode_of_event) = '{mode}'
+                WHERE mode_of_event ILIKE '%{mode}%'
                 ORDER BY date_of_event
                 """
             )
-            return _format_event_list(rows, f"{mode} events")
+
+            context = "\n".join(f"{r[0]} ({r[1]})" for r in rows)
+            return gemini_answer(question, context)
 
     # =====================================================
-    # 3️⃣ EVENTS BY YEAR
+    # DOMAIN / DEPARTMENT QUERIES
     # =====================================================
-    year_match = re.search(r"(19|20)\d{2}", q)
-    if "event" in q and year_match:
-        year = year_match.group()
-
-        rows = retriever_module.query_relational_db(
-            f"""
-            SELECT name_of_event, date_of_event
-            FROM events
-            WHERE EXTRACT(YEAR FROM date_of_event) = {year}
-            ORDER BY date_of_event
-            """
-        )
-        return _format_event_list(rows, f"events in {year}")
-
-    # =====================================================
-    # 4️⃣ DOMAIN FILTER (AI / ML / Web / Cloud etc.)
-    # =====================================================
-    if "event" in q:
-        domain_keywords = {
-            "ai": "AI",
-            "ml": "ML",
-            "data": "DATA",
-            "web": "WEB",
-            "cloud": "CLOUD",
-            "iot": "IOT",
-            "blockchain": "BLOCKCHAIN",
-            "cyber": "CYBER",
-            "robotics": "ROBOTICS",
-        }
-
-        for key, label in domain_keywords.items():
-            if key in q:
-                rows = retriever_module.query_relational_db(
-                    f"""
-                    SELECT name_of_event, event_domain, date_of_event
-                    FROM events
-                    WHERE event_domain ILIKE '%{label}%'
-                    ORDER BY date_of_event
-                    """
-                )
-                return _format_domain_list(rows, f"{label} events")
+    domains = ["ai", "ml", "robotics", "web", "cloud", "blockchain", "iot", "cyber"]
+    for d in domains:
+        if d in q:
+            rows = retriever_module.query_relational_db(
+                f"""
+                SELECT name_of_event, event_domain, date_of_event
+                FROM events
+                WHERE event_domain ILIKE '%{d}%'
+                """
+            )
+            context = "\n".join(
+                f"{r[0]} ({r[1]}) – {r[2]}"
+                for r in rows
+            )
+            return gemini_answer(question, context)
 
     # =====================================================
-    # 5️⃣ FALLBACK → SEMANTIC SEARCH
+    # RAG / SEMANTIC QUESTIONS
     # =====================================================
-    if generation_model is None:
-        return "I do not have that information."
+    vector_results = retriever_module.query_vector_db(question)
 
-    try:
-        results = retriever_module.query_vector_db(user_question)
-    except Exception as e:
-        return f"Error querying database: {e}"
+    if vector_results:
+        context = "\n\n".join(vector_results)
+        return gemini_answer(question, context)
 
-    if results and results[0] not in {"No matches", "Connection error"}:
-        return "\n\n".join(results)
-
-    return "I do not have that information."
-
-# ────────────────────────────────────────────────
-# CLI TEST
-# ────────────────────────────────────────────────
-if __name__ == "__main__":
-    print("✅ Club Knowledge Agent Ready")
-    while True:
-        user_input = input("\nYou: ")
-        if user_input.lower() in {"exit", "quit"}:
-            break
-        print("\nAgent:\n", handle_user_query(user_input))
+    return "I do not have enough information to answer that."

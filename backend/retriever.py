@@ -58,8 +58,7 @@ def query_vector_db(text_query: str):
     try:
         with engine.connect() as conn:
             result = conn.execute(
-                text(
-                    """
+                text("""
                     SELECT
                         name_of_event,
                         event_domain,
@@ -68,12 +67,12 @@ def query_vector_db(text_query: str):
                         venue,
                         description_insights
                     FROM events
-                    ORDER BY embedding <-> :embedding
+                    ORDER BY embedding <-> (:vec)::vector
                     LIMIT 5
-                    """
-                ),
-                {"embedding": embedding},
+                """),
+                {"vec": embedding},
             )
+
 
             rows = result.fetchall()
 

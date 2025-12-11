@@ -73,64 +73,88 @@ export default function AdminPage() {
         msg: `Success! "${formData.name_of_event}" added.`,
       });
     } catch (error: any) {
-      const errMsg =
-        error.response?.data?.detail || "Submission failed";
+      const errMsg = error.response?.data?.detail || "Submission failed";
       setStatus({ type: "error", msg: errMsg });
     } finally {
       setLoading(false);
     }
   };
 
-  /* ─────────────── UI ─────────────── */
+  /* ─────────────── UI (DARK THEME VERSION) ─────────────── */
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-lg p-8">
-
+    <div
+      className="min-h-screen p-8"
+      style={{ background: "var(--background)", color: "var(--foreground)" }}
+    >
+      <div
+        className="
+          max-w-5xl mx-auto rounded-xl p-8
+          bg-[rgba(20,20,35,0.85)]
+          border border-[rgba(0,255,170,0.25)]
+          shadow-[0_0_25px_rgba(0,255,170,0.1)]
+          backdrop-blur-xl
+        "
+      >
         {/* Header */}
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-gray-800">Add New Event</h1>
+          <h1
+            className="text-3xl font-bold"
+            style={{
+              color: "var(--violet)",
+              textShadow: "0 0 10px rgba(123,31,162,0.5)",
+            }}
+          >
+            Add New Event
+          </h1>
+
           <div className="flex gap-4">
-            <a href="/" className="text-blue-600 hover:underline">
+            <a
+              href="/"
+              className="hover:opacity-100 opacity-70 text-sm underline"
+              style={{ color: "var(--green)" }}
+            >
               Back to Chat
             </a>
+
             <button
               onClick={logout}
-              className="text-red-500 hover:underline text-sm"
+              className="text-red-400 hover:text-red-300 text-sm underline"
             >
               Logout
             </button>
           </div>
         </div>
 
+        {/* STATUS MESSAGE */}
         {status.msg && (
           <div
-            className={`p-4 mb-6 rounded ${
+            className={`p-4 mb-6 rounded text-sm ${
               status.type === "success"
-                ? "bg-green-100 text-green-700"
-                : "bg-red-100 text-red-700"
+                ? "bg-[rgba(0,255,170,0.15)] text-green-300 border border-green-500/40"
+                : "bg-[rgba(60,0,0,0.4)] text-red-400 border border-red-600/30"
             }`}
           >
             {status.msg}
           </div>
         )}
 
-        {/* FORM (unchanged UI) */}
+        {/* FORM */}
         <form
           onSubmit={handleSubmit}
           className="grid grid-cols-1 md:grid-cols-2 gap-6"
         >
-          {/* Core Details */}
-          <div className="col-span-2 border-b pb-2 mb-2 text-lg font-semibold">
+          {/* Section Headers */}
+          <div className="col-span-2 pb-2 mb-2 text-lg font-semibold border-b border-[rgba(255,255,255,0.2)]">
             Core Details
           </div>
 
+          {/* Inputs */}
           <input name="name_of_event" required placeholder="Event Name" onChange={handleChange} className="input" />
           <input name="event_domain" required placeholder="Domain (AI/ML)" onChange={handleChange} className="input" />
           <input name="date_of_event" type="date" required onChange={handleChange} className="input" />
           <input name="time_of_event" placeholder="Time" onChange={handleChange} className="input" />
 
-          {/* Logistics */}
-          <div className="col-span-2 border-b pb-2 mt-4 text-lg font-semibold">
+          <div className="col-span-2 pb-2 mt-4 text-lg font-semibold border-b border-[rgba(255,255,255,0.2)]">
             Logistics
           </div>
 
@@ -143,8 +167,7 @@ export default function AdminPage() {
           <input name="registration_fee" type="number" defaultValue="0" onChange={handleChange} className="input" />
           <input name="collaboration" placeholder="Collaboration" onChange={handleChange} className="input" />
 
-          {/* People */}
-          <div className="col-span-2 border-b pb-2 mt-4 text-lg font-semibold">
+          <div className="col-span-2 pb-2 mt-4 text-lg font-semibold border-b border-[rgba(255,255,255,0.2)]">
             People
           </div>
 
@@ -152,18 +175,23 @@ export default function AdminPage() {
           <input name="student_coordinators" placeholder="Student Coordinators" onChange={handleChange} className="input" />
           <input name="speakers" placeholder="Speakers" className="col-span-2 input" onChange={handleChange} />
 
-          {/* Content */}
-          <div className="col-span-2 border-b pb-2 mt-4 text-lg font-semibold">
+          <div className="col-span-2 pb-2 mt-4 text-lg font-semibold border-b border-[rgba(255,255,255,0.2)]">
             Content (For AI)
           </div>
 
           <textarea name="description_insights" required placeholder="Description & insights" onChange={handleChange} className="col-span-2 input h-32" />
           <textarea name="perks" placeholder="Perks" onChange={handleChange} className="col-span-2 input h-20" />
 
+          {/* SUBMIT BUTTON */}
           <button
             type="submit"
             disabled={loading}
-            className="col-span-2 bg-blue-600 text-white font-bold py-4 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="
+              col-span-2 py-4 rounded-lg font-bold text-black
+              bg-gradient-to-r from-teal-400 to-green-300
+              hover:opacity-85 transition shadow-[0_0_15px_rgba(0,255,170,0.4)]
+              disabled:opacity-50
+            "
           >
             {loading ? "Saving…" : "Submit Event"}
           </button>

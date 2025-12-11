@@ -31,15 +31,22 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center p-8">
-      <h1 className="text-4xl font-bold text-blue-600 mb-2">
+    <div
+      className="min-h-screen flex flex-col items-center p-8"
+      style={{ background: "var(--background)", color: "var(--foreground)" }}
+    >
+      {/* TITLE */}
+      <h1 className="text-4xl font-bold mb-2"
+          style={{ color: "var(--violet)", textShadow: "0 0 10px rgba(123,31,162,0.6)" }}>
         Bionary Search Agent
       </h1>
-      <p className="text-gray-600 mb-8">
-        Ask anything about past club events
-      </p>
+
+      {/* SUBTITLE */}
+      <p className="mb-8 opacity-70">Ask anything about past club events</p>
 
       <div className="w-full max-w-2xl">
+
+        {/* SEARCH BAR */}
         <form onSubmit={handleSearch} className="flex gap-3 mb-6">
           <input
             type="text"
@@ -47,16 +54,14 @@ export default function ChatPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className="
-              flex-1 px-4 py-3
-              rounded-lg
-              bg-white
-              text-gray-900
-              placeholder-gray-500
-              border border-gray-300
-              shadow-sm
+              flex-1 px-4 py-3 rounded-lg border
+              bg-[rgba(20,20,30,0.7)]
+              text-white
+              placeholder-[rgba(0,255,170,0.5)]
+              border-teal-400
               focus:outline-none
               focus:ring-2
-              focus:ring-blue-500
+              focus:ring-teal-500
             "
           />
 
@@ -64,12 +69,10 @@ export default function ChatPage() {
             type="submit"
             disabled={loading}
             className="
-              px-6 py-3
-              rounded-lg
-              font-medium
-              text-white
-              bg-blue-600
-              hover:bg-blue-700
+              px-6 py-3 rounded-lg font-medium
+              text-black
+              bg-gradient-to-r from-teal-400 to-green-300
+              hover:opacity-85
               disabled:opacity-50
               transition
             "
@@ -78,22 +81,32 @@ export default function ChatPage() {
           </button>
         </form>
 
+        {/* ANSWER CARD */}
         {answer && (
-          <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-            <h3 className="text-sm font-bold text-gray-500 mb-2 tracking-wide">
+          <div
+            className="
+              p-6 rounded-xl 
+              border border-[rgba(0,255,170,0.25)]
+              bg-[rgba(20,20,35,0.85)]
+              shadow-[0_0_20px_rgba(0,255,170,0.05)]
+            "
+          >
+            <h3 className="text-sm font-bold mb-2 tracking-wide opacity-70">
               AGENT RESPONSE
             </h3>
-            <div className="text-gray-800 whitespace-pre-wrap">
+
+            <div className="whitespace-pre-wrap text-white">
               {answer}
             </div>
           </div>
         )}
       </div>
 
+      {/* ADMIN LINK */}
       <div className="mt-12">
         <a
           href="/admin"
-          className="text-sm text-gray-500 hover:text-blue-600 underline"
+          className="text-sm underline opacity-70 hover:opacity-100 transition"
         >
           Go to Admin Dashboard
         </a>
