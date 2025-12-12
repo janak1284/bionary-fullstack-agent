@@ -1,146 +1,200 @@
-'use client';
-import { useState } from 'react';
-import axios from 'axios';
+"use client";
+
+import { useState, useEffect, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
+import axios from "axios";
 
 export default function AdminPage() {
+  const router = useRouter();
+
+  /* ─────────────── AUTH GUARD ─────────────── */
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      router.replace("/login");
+    }
+  }, [router]);
+
+  const logout = () => {
+    localStorage.removeItem("token");
+    router.replace("/login");
+  };
+
+  /* ─────────────── FORM STATE ─────────────── */
   const [formData, setFormData] = useState({
-    name_of_event: '',
-    event_domain: '',
-    date_of_event: '',
-    description_insights: '',
-    time_of_event: '',
-    faculty_coordinators: '',
-    student_coordinators: '',
-    venue: '',
-    mode_of_event: 'Offline',
-    registration_fee: '0',
-    speakers: '',
-    perks: '',
-    collaboration: '' // New Field
+    name_of_event: "",
+    event_domain: "",
+    date_of_event: "",
+    description_insights: "",
+    time_of_event: "",
+    faculty_coordinators: "",
+    student_coordinators: "",
+    venue: "",
+    mode_of_event: "Offline",
+    registration_fee: "0",
+    speakers: "",
+    perks: "",
+    collaboration: "",
   });
-  
-  const [status, setStatus] = useState<{type: 'success' | 'error' | '', msg: string}>({type: '', msg: ''});
+
+  const [status, setStatus] = useState<{ type: "success" | "error" | ""; msg: string }>({
+    type: "",
+    msg: "",
+  });
+
   const [loading, setLoading] = useState(false);
 
   const handleChange = (e: any) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  /* ─────────────── SUBMIT ─────────────── */
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setStatus({type: '', msg: ''});
+    setStatus({ type: "", msg: "" });
+
+    const token = localStorage.getItem("token");
 
     try {
-      await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/add-event`, formData);
-      setStatus({type: 'success', msg: `Success! "${formData.name_of_event}" added.`});
-      // Optional: Clear form or redirect
+      await axios.post(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/add-event`,
+        formData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      setStatus({
+        type: "success",
+        msg: `Success! "${formData.name_of_event}" added.`,
+      });
     } catch (error: any) {
-      console.error(error);
       const errMsg = error.response?.data?.detail || "Submission failed";
-      setStatus({type: 'error', msg: errMsg});
+      setStatus({ type: "error", msg: errMsg });
     } finally {
       setLoading(false);
     }
   };
 
+  /* ─────────────── UI (DARK THEME VERSION) ─────────────── */
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-5xl mx-auto bg-white rounded-xl shadow-lg p-8">
+    <div
+      className="min-h-screen p-8"
+      style={{ background: "var(--background)", color: "var(--foreground)" }}
+    >
+      <div
+        className="
+          max-w-5xl mx-auto rounded-xl p-8
+          bg-[rgba(20,20,35,0.85)]
+          border border-[rgba(0,255,170,0.25)]
+          shadow-[0_0_25px_rgba(0,255,170,0.1)]
+          backdrop-blur-xl
+        "
+      >
+        {/* Header */}
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-gray-800">Add New Event</h1>
-          <a href="/" className="text-blue-600 hover:underline">Back to Chat</a>
+          <h1
+            className="text-3xl font-bold"
+            style={{
+              color: "var(--violet)",
+              textShadow: "0 0 10px rgba(123,31,162,0.5)",
+            }}
+          >
+            Add New Event
+          </h1>
+
+          <div className="flex gap-4">
+            <a
+              href="/"
+              className="hover:opacity-100 opacity-70 text-sm underline"
+              style={{ color: "var(--green)" }}
+            >
+              Back to Chat
+            </a>
+
+            <button
+              onClick={logout}
+              className="text-red-400 hover:text-red-300 text-sm underline"
+            >
+              Logout
+            </button>
+          </div>
         </div>
 
+        {/* STATUS MESSAGE */}
         {status.msg && (
-          <div className={`p-4 mb-6 rounded ${status.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+          <div
+            className={`p-4 mb-6 rounded text-sm ${
+              status.type === "success"
+                ? "bg-[rgba(0,255,170,0.15)] text-green-300 border border-green-500/40"
+                : "bg-[rgba(60,0,0,0.4)] text-red-400 border border-red-600/30"
+            }`}
+          >
             {status.msg}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          
-          {/* --- Section 1: Core Details --- */}
-          <div className="col-span-2 border-b pb-2 mb-2 text-lg font-semibold text-gray-700">Core Details</div>
-          
-          <div>
-            <label className="block text-sm font-bold mb-1">Event Name *</label>
-            <input name="name_of_event" required onChange={handleChange} className="w-full p-2 border rounded" />
-          </div>
-          <div>
-            <label className="block text-sm font-bold mb-1">Domain *</label>
-            <input name="event_domain" placeholder="AI / ML" required onChange={handleChange} className="w-full p-2 border rounded" />
-          </div>
-          <div>
-            <label className="block text-sm font-bold mb-1">Date (YYYY-MM-DD) *</label>
-            <input name="date_of_event" type="date" required onChange={handleChange} className="w-full p-2 border rounded" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Time</label>
-            <input name="time_of_event" placeholder="e.g. 9 AM - 4 PM" onChange={handleChange} className="w-full p-2 border rounded" />
+        {/* FORM */}
+        <form
+          onSubmit={handleSubmit}
+          className="grid grid-cols-1 md:grid-cols-2 gap-6"
+        >
+          {/* Section Headers */}
+          <div className="col-span-2 pb-2 mb-2 text-lg font-semibold border-b border-[rgba(255,255,255,0.2)]">
+            Core Details
           </div>
 
-          {/* --- Section 2: Logistics --- */}
-          <div className="col-span-2 border-b pb-2 mb-2 mt-4 text-lg font-semibold text-gray-700">Logistics</div>
+          {/* Inputs */}
+          <input name="name_of_event" required placeholder="Event Name" onChange={handleChange} className="input" />
+          <input name="event_domain" required placeholder="Domain (AI/ML)" onChange={handleChange} className="input" />
+          <input name="date_of_event" type="date" required onChange={handleChange} className="input" />
+          <input name="time_of_event" placeholder="Time" onChange={handleChange} className="input" />
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Venue</label>
-            <input name="venue" onChange={handleChange} className="w-full p-2 border rounded" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Mode</label>
-            <select name="mode_of_event" onChange={handleChange} className="w-full p-2 border rounded">
-              <option value="Offline">Offline</option>
-              <option value="Online">Online</option>
-              <option value="Hybrid">Hybrid</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Registration Fee</label>
-            <input name="registration_fee" type="number" defaultValue="0" onChange={handleChange} className="w-full p-2 border rounded" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Collaboration</label>
-            <input name="collaboration" placeholder="e.g. GDSC, IEEE or N/A" onChange={handleChange} className="w-full p-2 border rounded" />
+          <div className="col-span-2 pb-2 mt-4 text-lg font-semibold border-b border-[rgba(255,255,255,0.2)]">
+            Logistics
           </div>
 
-          {/* --- Section 3: People --- */}
-          <div className="col-span-2 border-b pb-2 mb-2 mt-4 text-lg font-semibold text-gray-700">People</div>
+          <input name="venue" placeholder="Venue" onChange={handleChange} className="input" />
+          <select name="mode_of_event" onChange={handleChange} className="input">
+            <option>Offline</option>
+            <option>Online</option>
+            <option>Hybrid</option>
+          </select>
+          <input name="registration_fee" type="number" defaultValue="0" onChange={handleChange} className="input" />
+          <input name="collaboration" placeholder="Collaboration" onChange={handleChange} className="input" />
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Faculty Coordinators</label>
-            <input name="faculty_coordinators" onChange={handleChange} className="w-full p-2 border rounded" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1">Student Coordinators</label>
-            <input name="student_coordinators" onChange={handleChange} className="w-full p-2 border rounded" />
-          </div>
-          <div className="col-span-2">
-            <label className="block text-sm font-medium mb-1">Speakers</label>
-            <input name="speakers" placeholder="Name, Designation..." onChange={handleChange} className="w-full p-2 border rounded" />
+          <div className="col-span-2 pb-2 mt-4 text-lg font-semibold border-b border-[rgba(255,255,255,0.2)]">
+            People
           </div>
 
-          {/* --- Section 4: Content (For AI) --- */}
-          <div className="col-span-2 border-b pb-2 mb-2 mt-4 text-lg font-semibold text-gray-700">Content (For AI Search)</div>
+          <input name="faculty_coordinators" placeholder="Faculty Coordinators" onChange={handleChange} className="input" />
+          <input name="student_coordinators" placeholder="Student Coordinators" onChange={handleChange} className="input" />
+          <input name="speakers" placeholder="Speakers" className="col-span-2 input" onChange={handleChange} />
 
-          <div className="col-span-2">
-            <label className="block text-sm font-bold mb-1">Description & Insights *</label>
-            <textarea name="description_insights" required onChange={handleChange} className="w-full p-2 border rounded h-32" placeholder="Detailed description of what happened..." />
+          <div className="col-span-2 pb-2 mt-4 text-lg font-semibold border-b border-[rgba(255,255,255,0.2)]">
+            Content (For AI)
           </div>
-          <div className="col-span-2">
-            <label className="block text-sm font-medium mb-1">Perks</label>
-            <textarea name="perks" onChange={handleChange} className="w-full p-2 border rounded h-20" placeholder="OD, Certificates, Food..." />
-          </div>
-          
-          <div className="col-span-2 mt-6">
-            <button 
-              type="submit" 
-              disabled={loading}
-              className="w-full bg-blue-600 text-white font-bold py-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
-            >
-              {loading ? 'Generating Embeddings & Saving...' : 'Submit Event to Database'}
-            </button>
-          </div>
+
+          <textarea name="description_insights" required placeholder="Description & insights" onChange={handleChange} className="col-span-2 input h-32" />
+          <textarea name="perks" placeholder="Perks" onChange={handleChange} className="col-span-2 input h-20" />
+
+          {/* SUBMIT BUTTON */}
+          <button
+            type="submit"
+            disabled={loading}
+            className="
+              col-span-2 py-4 rounded-lg font-bold text-black
+              bg-gradient-to-r from-teal-400 to-green-300
+              hover:opacity-85 transition shadow-[0_0_15px_rgba(0,255,170,0.4)]
+              disabled:opacity-50
+            "
+          >
+            {loading ? "Saving…" : "Submit Event"}
+          </button>
         </form>
       </div>
     </div>

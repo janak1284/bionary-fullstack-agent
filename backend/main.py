@@ -1,21 +1,38 @@
-# backend/main.py
-import os
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+import hashlib
 from typing import Optional
-from dotenv import load_dotenv
-from fastapi.middleware.cors import CORSMiddleware
 
-# Load environment variables BEFORE importing your logic
+from fastapi import FastAPI, HTTPException, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel
+from jose import jwt, JWTError
+from dotenv import load_dotenv
+
+from database import Base, engine, SessionLocal
+from models import User
+from auth import router as auth_router
+
+# ────────────────────────────────────────────────
+# LOAD ENV
+# ────────────────────────────────────────────────
 load_dotenv()
 
-# Import your existing logic
+# Your existing logic
 import query_pipeline
-import frontend 
+import frontend  # python module, not nextjs
 
+# ────────────────────────────────────────────────
+# JWT CONFIG ⚠ MUST MATCH auth.py EXACTLY
+# ────────────────────────────────────────────────
+SECRET_KEY = "super-secret-key-change-later"
+ALGORITHM = "HS256"
+
+# ────────────────────────────────────────────────
+# APP
+# ────────────────────────────────────────────────
 app = FastAPI()
 
-# Allow Next.js (running on localhost:3000) to talk to this API
+# CORS for Next.js
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
@@ -24,7 +41,52 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Data Models ---
+# /auth/login
+app.include_router(auth_router)
+
+security = HTTPBearer()
+
+# ────────────────────────────────────────────────
+# TOKEN VERIFICATION DEPENDENCY
+# ────────────────────────────────────────────────
+def verify_token(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+):
+    token = credentials.credentials
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+
+        if not username:
+            raise HTTPException(status_code=401, detail="Invalid token payload")
+
+        return username
+
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+# ────────────────────────────────────────────────
+# DB INIT
+# ────────────────────────────────────────────────
+def create_default_user():
+    db = SessionLocal()
+    try:
+        if not db.query(User).first():
+            user = User(
+                username="admin",
+                password_hash=hashlib.sha256(
+                    "admin123".encode()
+                ).hexdigest(),
+            )
+            db.add(user)
+            db.commit()
+    finally:
+        db.close()
+
+# ────────────────────────────────────────────────
+# DATA MODELS
+# ────────────────────────────────────────────────
 class ChatRequest(BaseModel):
     query: str
 
@@ -33,7 +95,6 @@ class EventData(BaseModel):
     event_domain: str
     date_of_event: str
     description_insights: str
-    # Optional fields with defaults (Matching your Schema)
     time_of_event: Optional[str] = "N/A"
     faculty_coordinators: Optional[str] = "N/A"
     student_coordinators: Optional[str] = "N/A"
@@ -44,43 +105,46 @@ class EventData(BaseModel):
     perks: Optional[str] = "N/A"
     collaboration: Optional[str] = "N/A"
 
-# --- Endpoints ---
-
+# ────────────────────────────────────────────────
+# ROUTES
+# ────────────────────────────────────────────────
 @app.get("/")
 def health_check():
     return {"status": "Club Knowledge Agent is active"}
 
 @app.post("/api/chat")
 def chat_endpoint(request: ChatRequest):
-    """
-    Calls query_pipeline.handle_user_query
-    """
     try:
-        print(f"Received query: {request.query}")
+        print("➡️ Incoming query:", request.query)
         response = query_pipeline.handle_user_query(request.query)
+        print("✅ Agent response generated")
         return {"answer": response}
+
     except Exception as e:
-        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()   # 🔥 THIS IS THE KEY PART
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/api/add-event")
-def add_event_endpoint(event: EventData):
-    """
-    Calls frontend.add_new_event (Option B: Instant Embedding)
-    """
+def add_event_endpoint(
+    event: EventData,
+    _: dict = Depends(verify_token),
+):
     try:
-        # Convert Pydantic model to dict for your existing function
-        form_data = event.dict()
-        
-        # Call your existing logic
-        result = frontend.add_new_event(form_data)
-        
-        if result.get("status") == "success":
-            return result
-        else:
-            raise HTTPException(status_code=500, detail=result.get("message"))
-            
+        result = frontend.add_new_event(event.dict())
+        return result
     except Exception as e:
+        print("ADD EVENT ERROR:", e)  # keep this
         raise HTTPException(status_code=500, detail=str(e))
 
-# Run with: uvicorn main:app --reload
+
+
+# ────────────────────────────────────────────────
+# STARTUP
+# ────────────────────────────────────────────────
+Base.metadata.create_all(bind=engine)
+create_default_user()
+
+# Run with:
+# uvicorn main:app --reload

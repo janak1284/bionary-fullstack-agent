@@ -1,172 +1,164 @@
 import os
-import psycopg2
-from pgvector.psycopg2 import register_vector
+from dotenv import load_dotenv
+from sqlalchemy import text
 from sentence_transformers import SentenceTransformer
 import numpy as np
 
-model = SentenceTransformer("BAAI/bge-base-en-v1.5", trust_remote_code=True)
+from database import engine
 
-def _connect_to_db():
-    url = os.environ.get("NEON_DB_URL")
-    if not url:
-        return None
+load_dotenv()
+
+# ────────────────────────────────────────────────
+# EMBEDDING MODEL
+# ────────────────────────────────────────────────
+model = SentenceTransformer(
+    "BAAI/bge-base-en-v1.5",
+    trust_remote_code=True
+)
+
+# ────────────────────────────────────────────────
+# RELATIONAL QUERY
+# ────────────────────────────────────────────────
+def query_relational_db(sql: str):
     try:
-        return psycopg2.connect(url)
-    except Exception:
-        return None
-
-
-def query_relational_db(sql):
-    conn = _connect_to_db()
-    if not conn:
-        return [("Connection error",)]
-    try:
-        with conn.cursor() as cur:
-            cur.execute(sql)
-            rows = cur.fetchall()
+        with engine.connect() as conn:
+            result = conn.execute(text(sql))
+            rows = result.fetchall()
+        return rows or []
     except Exception as e:
-        rows = [(f"SQL error: {e}",)]
-    conn.close()
-    if not rows:
-        return [("No results",)]
-    return rows
+        print("❌ Relational DB error:", e)
+        return []
 
 
-def _clean(q):
+# ────────────────────────────────────────────────
+# VECTOR SEARCH
+# ────────────────────────────────────────────────
+def _clean(text_query: str):
     import re
-    remove = {
+    stopwords = {
         "event","workshop","happen","when","what","where","who","tell",
         "me","about","the","a","an","of","in","on","is","was","did","for"
     }
-    q = re.sub(r"[^\w\s]", " ", q.lower())
-    parts = [w for w in q.split() if w not in remove]
-    return " ".join(parts) if parts else q
+    text_query = re.sub(r"[^\w\s]", " ", text_query.lower())
+    tokens = [w for w in text_query.split() if w not in stopwords]
+    return " ".join(tokens) if tokens else text_query
 
 
-def query_vector_db(text):
-    conn = _connect_to_db()
-    if not conn:
-        return ["Connection error"]
-    
-    q = _clean(text)
-    
-    try:
-        emb = model.encode(q)
-        if isinstance(emb, np.ndarray):
-            emb = emb.tolist()
-    except Exception:
-        conn.close()
-        return ["Embedding error"]
+def query_vector_db(text_query: str):
+    query = _clean(text_query)
 
     try:
-        with conn.cursor() as cur:
-            register_vector(cur)
-            cur.execute(
-                """
-                SELECT name_of_event, event_domain, date_of_event, time_of_event,
-                       venue, description_insights,
-                       1 - (embedding <=> %s::vector) AS sim
-                FROM events
-                ORDER BY embedding <-> %s::vector
-                LIMIT 5;
-                """,
-                (emb, emb),
-            )
-            rows = cur.fetchall()
+        embedding = model.encode(query)
+        if isinstance(embedding, np.ndarray):
+            embedding = embedding.tolist()
     except Exception as e:
-        conn.close()
-        return [f"Error {e}"]
-
-    conn.close()
-
-    if not rows:
-        return ["No matches"]
-
-    ctx = []
-    for r in rows:
-        ctx.append(
-            f"Name: {r[0]}\n"
-            f"Domain: {r[1]}\n"
-            f"Date: {r[2]}\n"
-            f"Time: {r[3]}\n"
-            f"Venue: {r[4]}\n"
-            f"Details: {r[5]}"
-        )
-    return ctx
-
-
-def add_new_event(form_data):
-    conn = _connect_to_db()
-    if not conn:
-        return False, "Database connection error."
+        print("❌ Embedding error:", e)
+        return ["Embedding failed"]
 
     try:
-        desc = (form_data.get("description_insights", "") or "").strip()
-        perks = (form_data.get("perks", "") or "").strip()
-        collab = (form_data.get("collaboration", "") or "").strip()
+        with engine.connect() as conn:
+            result = conn.execute(
+                text("""
+                    SELECT
+                        name_of_event,
+                        event_domain,
+                        date_of_event,
+                        time_of_event,
+                        venue,
+                        description_insights
+                    FROM events
+                    ORDER BY embedding <-> (:vec)::vector
+                    LIMIT 5
+                """),
+                {"vec": embedding},
+            )
 
+
+            rows = result.fetchall()
+
+        if not rows:
+            return ["No matching events found"]
+
+        return [
+            f"📌 {r[0]}\n"
+            f"• Domain: {r[1]}\n"
+            f"• Date: {r[2]}\n"
+            f"• Time: {r[3]}\n"
+            f"• Venue: {r[4]}\n"
+            f"• Details: {r[5]}"
+            for r in rows
+        ]
+
+    except Exception as e:
+        print("❌ Vector DB error:", e)
+        return ["Vector search failed"]
+
+
+# ────────────────────────────────────────────────
+# INSERT NEW EVENT (THIS WAS MISSING 🚨)
+# ────────────────────────────────────────────────
+def add_new_event(form_data: dict):
+    try:
         search_text = (
-            f"Event: {form_data.get('name_of_event', '')}\n"
-            f"Domain: {form_data.get('event_domain', '')}\n"
-            f"Details: {desc}\n"
-            f"Perks: {perks}"
+            f"{form_data.get('name_of_event', '')} "
+            f"{form_data.get('event_domain', '')} "
+            f"{form_data.get('description_insights', '')} "
+            f"{form_data.get('perks', '')}"
         )
 
-        emb = model.encode(search_text)
-        if isinstance(emb, np.ndarray):
-            emb = emb.tolist()
+        embedding = model.encode(search_text)
+        if isinstance(embedding, np.ndarray):
+            embedding = embedding.tolist()
 
-        parms = (
-            form_data.get("serial_no", 0),
-            form_data.get("name_of_event"),
-            form_data.get("event_domain"),
-            form_data.get("date_of_event"),
-            form_data.get("time_of_event", "N/A"),
-            form_data.get("faculty_coordinators", "N/A"),
-            form_data.get("student_coordinators", "N/A"),
-            form_data.get("venue", "N/A"),
-            form_data.get("mode_of_event", "N/A"),
-            form_data.get("registration_fee", "0"),
-            form_data.get("speakers", "N/A"),
-            perks,
-            collab,
-            desc,
-            search_text,
-            emb,
-        )
-
-        with conn.cursor() as cur:
-            register_vector(cur)
-            cur.execute(
-                """
-                INSERT INTO events (
-                    serial_no,
-                    name_of_event,
-                    event_domain,
-                    date_of_event,
-                    time_of_event,
-                    faculty_coordinators,
-                    student_coordinators,
-                    venue,
-                    mode_of_event,
-                    registration_fee,
-                    speakers,
-                    perks,
-                    collaboration,
-                    description_insights,
-                    search_text,
-                    embedding
-                )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """,
-                parms,
+        with engine.begin() as conn:  # ✅ auto-commit
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO events (
+                        name_of_event,
+                        event_domain,
+                        date_of_event,
+                        time_of_event,
+                        faculty_coordinators,
+                        student_coordinators,
+                        venue,
+                        mode_of_event,
+                        registration_fee,
+                        speakers,
+                        perks,
+                        collaboration,
+                        description_insights,
+                        search_text,
+                        embedding
+                    )
+                    VALUES (
+                        :name_of_event,
+                        :event_domain,
+                        :date_of_event,
+                        :time_of_event,
+                        :faculty_coordinators,
+                        :student_coordinators,
+                        :venue,
+                        :mode_of_event,
+                        :registration_fee,
+                        :speakers,
+                        :perks,
+                        :collaboration,
+                        :description_insights,
+                        :search_text,
+                        :embedding
+                    )
+                    """
+                ),
+                {
+                    **form_data,
+                    "search_text": search_text,
+                    "embedding": embedding,
+                },
             )
 
-        conn.commit()
-        conn.close()
-        return True, "Event added successfully."
+        return {"status": "success"}
 
     except Exception as e:
-        conn.rollback()
-        conn.close()
-        return False, str(e)
+        print("❌ Insert error:", e)
+        return {"status": "error", "message": str(e)}

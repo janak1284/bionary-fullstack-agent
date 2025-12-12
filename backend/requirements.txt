@@ -6,3 +6,5 @@ pgvector
 sentence-transformers
 google-generativeai
 numpy
+sqlalchemy
+python-jose

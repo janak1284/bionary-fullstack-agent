@@ -30,21 +30,16 @@ def _load_model():
 
 def add_new_event(form_data):
     conn = _get_db_connection()
-    if not conn: return {"status": "error", "message": "Database connection failed"}
+    if not conn:
+        return {"status": "error", "message": "Database connection failed"}
 
     try:
         model = _load_model()
-        
-        # 1. Prepare Text Fields (Handle Defaults)
+
         name = form_data.get("name_of_event", "Unknown")
         desc = form_data.get("description_insights", "") or ""
-        # Remove highlights merger if you aren't collecting highlights separately anymore
-        # based on your csv, description_insights seems to be the main body.
-        
         collab = form_data.get("collaboration", "N/A")
-        
-        # 2. Create Search Text (Context for the AI)
-        # We include Collaboration here so users can ask "Show collaborative events"
+
         search_text = (
             f"Event: {name}\n"
             f"Domain: {form_data.get('event_domain', 'General')}\n"
@@ -52,29 +47,42 @@ def add_new_event(form_data):
             f"Perks: {form_data.get('perks', 'N/A')}\n"
             f"Collaboration: {collab}"
         )
-        
+
         print(f"[frontend] Embedding: {name}")
         embedding_vector = model.encode(search_text).tolist()
 
-        # 3. Insert into Database (Full Schema)
         with conn.cursor() as cur:
             register_vector(cur)
+
             sql = """
                 INSERT INTO events (
-                    event_id, serial_no, name_of_event, event_domain,
-                    date_of_event, time_of_event, faculty_coordinators,
-                    student_coordinators, venue, mode_of_event,
-                    registration_fee, speakers, perks, collaboration,
-                    description_insights, search_text, embedding
+                    name_of_event,
+                    event_domain,
+                    date_of_event,
+                    time_of_event,
+                    faculty_coordinators,
+                    student_coordinators,
+                    venue,
+                    mode_of_event,
+                    registration_fee,
+                    speakers,
+                    perks,
+                    collaboration,
+                    description_insights,
+                    search_text,
+                    embedding
                 )
-                VALUES (%s, 0, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s
+                )
             """
-            # Map params strictly to the order above
+
             params = (
-                name,                                           # event_id (using name)
-                name,                                           # name_of_event
-                form_data.get("event_domain"),                  # event_domain
-                form_data.get("date_of_event"),                 # date_of_event
+                name,
+                form_data.get("event_domain"),
+                form_data.get("date_of_event"),
                 form_data.get("time_of_event", "N/A"),
                 form_data.get("faculty_coordinators", "N/A"),
                 form_data.get("student_coordinators", "N/A"),
@@ -83,19 +91,23 @@ def add_new_event(form_data):
                 form_data.get("registration_fee", "0"),
                 form_data.get("speakers", "N/A"),
                 form_data.get("perks", "N/A"),
-                collab,                                         # collaboration
-                desc,                                           # description_insights
-                search_text,                                    # search_text
-                embedding_vector                                # embedding
+                collab,
+                desc,
+                search_text,
+                embedding_vector
             )
+
             cur.execute(sql, params)
-            
+
         conn.commit()
         return {"status": "success", "message": "Event saved successfully."}
 
     except Exception as e:
-        if conn: conn.rollback()
-        print(f"Error: {e}")
+        if conn:
+            conn.rollback()
+        traceback.print_exc()
         return {"status": "error", "message": str(e)}
+
     finally:
-        if conn: conn.close()
+        if conn:
+            conn.close()
