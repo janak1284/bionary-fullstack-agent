@@ -221,7 +221,7 @@ def handle_user_query(question: str) -> str:
                 f"Event: {r[0]}\n"
                 f"  Domain: {r[1]}\n"
                 f"  Date: {r[2]}\n"
-                f"  Time: {r[3}\n"
+                f"  Time: {r[3]}\n"
                 f"  Venue: {r[4]}\n"
                 f"  Mode: {r[5]}\n"
                 f"  Fee: {r[6]}\n"
