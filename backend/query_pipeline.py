@@ -28,6 +28,20 @@ def extract_year(text):
     return int(m.group()) if m else None
 
 
+def extract_person_name(text):
+    # This is a simple implementation and can be improved with more sophisticated NLP techniques
+    # For now, it assumes the name follows the keyword
+    keywords = ["who", "coordinate", "coordinator", "speaker"]
+    for keyword in keywords:
+        if keyword in text:
+            parts = text.split(keyword)
+            if len(parts) > 1:
+                # Naive assumption: the name is the first few words after the keyword
+                potential_name = parts[1].strip()
+                # A more robust solution would use a proper NER model
+                return " ".join(potential_name.split()[:3]) # Assume name is max 3 words
+    return None
+
 def gemini_answer(question, context):
     """
     Gemini ADDS language, NOT facts.
@@ -112,6 +126,46 @@ def handle_user_query(question: str) -> str:
         )
 
         return gemini_answer(question, context)
+        
+    # =====================================================
+    # COORDINATOR / SPEAKER QUERIES
+    # =====================================================
+    if any(k in q for k in ["coordinate", "coordinator", "speaker", "who"]):
+        person_name = extract_person_name(q)
+        if person_name:
+            sql = f"""
+            SELECT
+                name_of_event, event_domain, date_of_event, time_of_event,
+                venue, mode_of_event, registration_fee, speakers, perks,
+                description_insights, faculty_coordinators, student_coordinators,
+                collaboration
+            FROM events
+            WHERE student_coordinators ILIKE '%{person_name}%'
+               OR faculty_coordinators ILIKE '%{person_name}%'
+               OR speakers ILIKE '%{person_name}%'
+            """
+            rows = retriever_module.query_relational_db(sql)
+
+            if not rows:
+                return "No events found for that person."
+
+            context = "\n".join(
+                f"Event: {r[0]}\n"
+                f"  Domain: {r[1]}\n"
+                f"  Date: {r[2]}\n"
+                f"  Time: {r[3]}\n"
+                f"  Venue: {r[4]}\n"
+                f"  Mode: {r[5]}\n"
+                f"  Fee: {r[6]}\n"
+                f"  Speakers: {r[7]}\n"
+                f"  Perks: {r[8]}\n"
+                f"  Description: {r[9]}\n"
+                f"  Faculty Coordinators: {r[10]}\n"
+                f"  Student Coordinators: {r[11]}\n"
+                f"  Collaboration: {r[12]}"
+                for r in rows
+            )
+            return gemini_answer(question, context)
 
     # =====================================================
     # ONLINE / OFFLINE / HYBRID
@@ -185,7 +239,7 @@ def handle_user_query(question: str) -> str:
             return gemini_answer(question, context)
 
     # =====================================================
-    # RAG / SEMANTIC QUESTIONS
+    # RAG / SEMANTIC QUESTIONS (FALLBACK)
     # =====================================================
     vector_results = retriever_module.query_vector_db(question)
 
