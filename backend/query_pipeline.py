@@ -285,13 +285,10 @@ def handle_user_query(question: str) -> str:
             )
             return gemini_answer(question, context)
 
-    # =====================================================
-    # RAG / SEMANTIC QUESTIONS (FALLBACK)
-    # =====================================================
     vector_results = retriever_module.query_vector_db(question)
 
-    if vector_results:
-        context = "\n\n".join(vector_results)
-        return gemini_answer(question, context)
+if vector_results:
+    context = "\n\n".join(vector_results)
+    return gemini_answer(question, context)
 
-    return "I do not have enough information to answer that."
+return "I do not have enough information to answer that."
