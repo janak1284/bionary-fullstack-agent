@@ -30,17 +30,14 @@ def extract_year(text):
 
 def extract_person_name(text):
     # This is a simple implementation and can be improved with more sophisticated NLP techniques
-    # For now, it assumes the name follows the keyword
-    keywords = ["who", "coordinate", "coordinator", "speaker"]
+    keywords = ["who", "coordinate", "coordinator", "speaker", "events", "do"]
+    
+    # Sequentially remove keywords from the text
     for keyword in keywords:
-        if keyword in text:
-            parts = text.split(keyword)
-            if len(parts) > 1:
-                # Naive assumption: the name is the first few words after the keyword
-                potential_name = parts[1].strip()
-                # A more robust solution would use a proper NER model
-                return " ".join(potential_name.split()[:3]) # Assume name is max 3 words
-    return None
+        text = text.replace(keyword, "")
+        
+    # The remaining text should be the name
+    return text.strip()
 
 def gemini_answer(question, context):
     """
@@ -140,9 +137,9 @@ def handle_user_query(question: str) -> str:
                 description_insights, faculty_coordinators, student_coordinators,
                 collaboration
             FROM events
-            WHERE student_coordinators ILIKE '%{person_name}%'
-               OR faculty_coordinators ILIKE '%{person_name}%'
-               OR speakers ILIKE '%{person_name}%'
+            WHERE LOWER(student_coordinators) ILIKE '%{person_name.lower()}%'
+               OR LOWER(faculty_coordinators) ILIKE '%{person_name.lower()}%'
+               OR LOWER(speakers) ILIKE '%{person_name.lower()}%'
             """
             rows = retriever_module.query_relational_db(sql)
 
@@ -224,7 +221,7 @@ def handle_user_query(question: str) -> str:
                 f"Event: {r[0]}\n"
                 f"  Domain: {r[1]}\n"
                 f"  Date: {r[2]}\n"
-                f"  Time: {r[3]}\n"
+                f"  Time: {r[3}\n"
                 f"  Venue: {r[4]}\n"
                 f"  Mode: {r[5]}\n"
                 f"  Fee: {r[6]}\n"
