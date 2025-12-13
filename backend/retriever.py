@@ -106,6 +106,39 @@ def hybrid_query(
         print("❌ Hybrid query error:", e)
         return []
 
+def query_fuzzy_event_name(text_query: str):
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(
+                text("""
+                    SELECT
+                        name_of_event,
+                        event_domain,
+                        date_of_event,
+                        time_of_event,
+                        venue,
+                        description_insights,
+                        similarity(name_of_event, :q) AS score
+                    FROM events
+                    ORDER BY score DESC
+                    LIMIT 3
+                """),
+                {"q": text_query},
+            )
+            rows = result.fetchall()
+
+        return [
+            f"{r[0]}\n"
+            f"Domain: {r[1]}\n"
+            f"Date: {r[2]}\n"
+            f"Time: {r[3]}\n"
+            f"Venue: {r[4]}\n"
+            f"Details: {r[5]}"
+            for r in rows
+        ] if rows else []
+
+    except Exception:
+        return []
 
 # ────────────────────────────────────────────────
 # INSERT NEW EVENT (THIS WAS MISSING 🚨)

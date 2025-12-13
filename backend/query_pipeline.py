@@ -118,4 +118,3 @@ def handle_user_query(question: str) -> str:
 
     context = "\n\n".join(results)
     return gemini_answer(question, context)
-
