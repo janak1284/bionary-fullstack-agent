@@ -9,10 +9,27 @@ export default function AdminPage() {
 
   /* ─────────────── AUTH GUARD ─────────────── */
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (!token) {
-      router.replace("/login");
-    }
+    const verify = async () => {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        router.replace("/login");
+        return;
+      }
+
+      try {
+        await axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/verify-token`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      } catch (error) {
+        console.error("Token verification failed:", error);
+        localStorage.removeItem("token"); // Clean up invalid token
+        router.replace("/login");
+      }
+    };
+
+    verify();
   }, [router]);
 
   const logout = () => {
@@ -141,7 +158,7 @@ export default function AdminPage() {
         {/* FORM */}
         <form
           onSubmit={handleSubmit}
-          className="grid grid-cols-1 md:grid-cols-2 gap-6"
+          className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4"
         >
           {/* Section Headers */}
           <div className="col-span-2 pb-2 mb-2 text-lg font-semibold border-b border-[rgba(255,255,255,0.2)]">
@@ -149,45 +166,84 @@ export default function AdminPage() {
           </div>
 
           {/* Inputs */}
-          <input name="name_of_event" required placeholder="Event Name" onChange={handleChange} className="input" />
-          <input name="event_domain" required placeholder="Domain (AI/ML)" onChange={handleChange} className="input" />
-          <input name="date_of_event" type="date" required onChange={handleChange} className="input" />
-          <input name="time_of_event" placeholder="Time" onChange={handleChange} className="input" />
+          <div>
+            <label className="label">Event Name <span className="text-red-500">*</span></label>
+            <input name="name_of_event" required placeholder="Event Name" onChange={handleChange} className="input" />
+          </div>
+          <div>
+            <label className="label">Domain (AI/ML) <span className="text-red-500">*</span></label>
+            <input name="event_domain" required placeholder="Domain (AI/ML)" onChange={handleChange} className="input" />
+          </div>
+          <div>
+            <label className="label">Date <span className="text-red-500">*</span></label>
+            <input name="date_of_event" type="date" required onChange={handleChange} className="input" />
+          </div>
+          <div>
+            <label className="label">Time</label>
+            <input name="time_of_event" placeholder="Time" onChange={handleChange} className="input" />
+          </div>
 
           <div className="col-span-2 pb-2 mt-4 text-lg font-semibold border-b border-[rgba(255,255,255,0.2)]">
             Logistics
           </div>
 
-          <input name="venue" placeholder="Venue" onChange={handleChange} className="input" />
-          <select name="mode_of_event" onChange={handleChange} className="input">
-            <option>Offline</option>
-            <option>Online</option>
-            <option>Hybrid</option>
-          </select>
-          <input name="registration_fee" type="number" defaultValue="0" onChange={handleChange} className="input" />
-          <input name="collaboration" placeholder="Collaboration" onChange={handleChange} className="input" />
+          <div>
+            <label className="label">Venue</label>
+            <input name="venue" placeholder="Venue" onChange={handleChange} className="input" />
+          </div>
+          <div>
+            <label className="label">Mode</label>
+            <select name="mode_of_event" onChange={handleChange} className="input">
+              <option>Offline</option>
+              <option>Online</option>
+              <option>Hybrid</option>
+            </select>
+          </div>
+          <div>
+            <label className="label">Registration Fee</label>
+            <input name="registration_fee" type="number" defaultValue="0" onChange={handleChange} className="input" />
+          </div>
+          <div>
+            <label className="label">Collaboration</label>
+            <input name="collaboration" placeholder="Collaboration" onChange={handleChange} className="input" />
+          </div>
 
           <div className="col-span-2 pb-2 mt-4 text-lg font-semibold border-b border-[rgba(255,255,255,0.2)]">
             People
           </div>
 
-          <input name="faculty_coordinators" placeholder="Faculty Coordinators" onChange={handleChange} className="input" />
-          <input name="student_coordinators" placeholder="Student Coordinators" onChange={handleChange} className="input" />
-          <input name="speakers" placeholder="Speakers" className="col-span-2 input" onChange={handleChange} />
+          <div>
+            <label className="label">Faculty Coordinators</label>
+            <input name="faculty_coordinators" placeholder="Faculty Coordinators" onChange={handleChange} className="input" />
+          </div>
+          <div>
+            <label className="label">Student Coordinators</label>
+            <input name="student_coordinators" placeholder="Student Coordinators" onChange={handleChange} className="input" />
+          </div>
+          <div className="col-span-2">
+            <label className="label">Speakers</label>
+            <input name="speakers" placeholder="Speakers" className="input" onChange={handleChange} />
+          </div>
 
           <div className="col-span-2 pb-2 mt-4 text-lg font-semibold border-b border-[rgba(255,255,255,0.2)]">
             Content (For AI)
           </div>
 
-          <textarea name="description_insights" required placeholder="Description & insights" onChange={handleChange} className="col-span-2 input h-32" />
-          <textarea name="perks" placeholder="Perks" onChange={handleChange} className="col-span-2 input h-20" />
+          <div className="col-span-2">
+            <label className="label">Description & Insights <span className="text-red-500">*</span></label>
+            <textarea name="description_insights" required placeholder="A detailed summary for the AI to understand the event" onChange={handleChange} className="input h-32" />
+          </div>
+          <div className="col-span-2">
+            <label className="label">Perks</label>
+            <textarea name="perks" placeholder="What will attendees gain?" onChange={handleChange} className="input h-20" />
+          </div>
 
           {/* SUBMIT BUTTON */}
           <button
             type="submit"
             disabled={loading}
             className="
-              col-span-2 py-4 rounded-lg font-bold text-black
+              col-span-2 mt-4 py-4 rounded-lg font-bold text-black
               bg-gradient-to-r from-teal-400 to-green-300
               hover:opacity-85 transition shadow-[0_0_15px_rgba(0,255,170,0.4)]
               disabled:opacity-50

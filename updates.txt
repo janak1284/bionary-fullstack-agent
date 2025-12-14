@@ -23,3 +23,28 @@ The persistent failure of "beginner events" queries suggests that:
 
 **Final Status:**
 The core request of implementing the hybrid search architecture with `pg_trgm` has been completed. All specified components (hard filters, fuzzy search, and semantic search) are integrated and functioning, with observed behavior aligning with the current data. The fine-tuning of semantic relevance for specific phrases like "beginner events" may require further data enrichment, more advanced natural language processing (NLP) techniques, or adjustments to the query's weighting/thresholds that are beyond the scope of this implementation.
+
+**Update 2025-12-15**
+
+**Feature:** Improved Admin Panel UX and Data Consistency.
+
+**Reasoning:**
+The admin panel for adding new events had several usability issues. It allowed access with invalid tokens, the form was not user-friendly, and it didn't handle empty data fields consistently.
+
+**Changes Made:**
+
+1.  **Enhanced Authentication (`backend/main.py`, `frontend/app/admin/page.tsx`):**
+    *   **Change:** Implemented a `/api/verify-token` endpoint in the backend to validate JWTs. The frontend now calls this endpoint on page load to ensure the user has a valid, active session before rendering the admin page.
+    *   **Reasoning:** To prevent unauthorized access and ensure the admin area is properly protected. The previous implementation only checked for a token's existence, not its validity.
+
+2.  **Improved Form UI (`frontend/app/admin/page.tsx`):**
+    *   **Change:** Added `<label>` elements above each input field and marked mandatory fields with a red asterisk (`*`).
+    *   **Reasoning:** To make the form more intuitive and reduce user error by clearly indicating what information is required.
+
+3.  **Consistent Data Handling (`backend/main.py`):**
+    *   **Change:** Added a `root_validator` to the `EventData` Pydantic model. The validator now automatically converts any empty string fields submitted by the form to the string `"NaN"`, except for `registration_fee`, which defaults to `"0"`.
+    *   **Reasoning:** To ensure data consistency in the database. This prevents null or empty string values from being saved, which simplifies data querying and processing later on.
+		
+4. **Bug fix (`backend/main.py`):**
+    *   **Change:** Imported `root_validator` from `pydantic`. 
+    *   **Reasoning:** To fix the `NameError: name 'root_validator' is not defined` error that was crashing the server.

@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel
+from pydantic import BaseModel, root_validator
 from jose import jwt, JWTError
 from dotenv import load_dotenv
 
@@ -91,15 +91,25 @@ class EventData(BaseModel):
     event_domain: str
     date_of_event: str
     description_insights: str
-    time_of_event: Optional[str] = "N/A"
-    faculty_coordinators: Optional[str] = "N/A"
-    student_coordinators: Optional[str] = "N/A"
-    venue: Optional[str] = "N/A"
+    time_of_event: Optional[str] = ""
+    faculty_coordinators: Optional[str] = ""
+    student_coordinators: Optional[str] = ""
+    venue: Optional[str] = ""
     mode_of_event: Optional[str] = "Offline"
     registration_fee: Optional[str] = "0"
-    speakers: Optional[str] = "N/A"
-    perks: Optional[str] = "N/A"
-    collaboration: Optional[str] = "N/A"
+    speakers: Optional[str] = ""
+    perks: Optional[str] = ""
+    collaboration: Optional[str] = ""
+
+    @root_validator(pre=True)
+    def empty_str_to_nan(cls, values):
+        for key, value in values.items():
+            if value == "":
+                if key == "registration_fee":
+                    values[key] = "0"
+                else:
+                    values[key] = "NaN"
+        return values
 
 # ────────────────────────────────────────────────
 # ROUTES
@@ -133,6 +143,10 @@ def add_event_endpoint(
     except Exception as e:
         print("ADD EVENT ERROR:", e)  # keep this
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/verify-token")
+def verify_token_endpoint(_: dict = Depends(verify_token)):
+    return {"status": "success", "message": "Token is valid"}
 
 
 
