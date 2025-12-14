@@ -1,7 +1,7 @@
-// app/page.tsx
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import axios from "axios";
 
 export default function ChatPage() {
@@ -104,12 +104,12 @@ export default function ChatPage() {
 
       {/* ADMIN LINK */}
       <div className="mt-12">
-        <a
+        <Link
           href="/admin"
           className="text-sm underline opacity-70 hover:opacity-100 transition"
         >
           Go to Admin Dashboard
-        </a>
+        </Link>
       </div>
     </div>
   );

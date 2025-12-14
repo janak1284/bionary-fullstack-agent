@@ -11,6 +11,7 @@ export default function AdminPage() {
   useEffect(() => {
     const verify = async () => {
       const token = localStorage.getItem("token");
+      console.log("Token from localStorage:", token);
       if (!token) {
         router.replace("/login");
         return;

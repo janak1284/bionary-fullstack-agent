@@ -48,3 +48,11 @@ The admin panel for adding new events had several usability issues. It allowed a
 4. **Bug fix (`backend/main.py`):**
     *   **Change:** Imported `root_validator` from `pydantic`. 
     *   **Reasoning:** To fix the `NameError: name 'root_validator' is not defined` error that was crashing the server.
+
+5. **Bug fix (`backend/retriever.py`):**
+    *   **Change:** Imported `Optional` from `typing`.
+    *   **Reasoning:** To fix the `NameError: name 'Optional' is not defined` error that was crashing the server.
+
+6. **Bug fix (`frontend/app/page.tsx`):**
+    *   **Change:** Corrected the `Link` component usage and added `useState` import.
+    *   **Reasoning:** To fix the build error and ensure proper client-side navigation.
