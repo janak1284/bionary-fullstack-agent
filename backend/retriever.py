@@ -28,6 +28,7 @@ def hybrid_query(
     vector_weight: float = 0.7,
     trigram_weight: float = 0.3,
     vector_threshold: float = 0.7,
+    limit: Optional[int] = 5,
 ):
     """
     Performs a hybrid search on the events table using a combination of
@@ -76,6 +77,8 @@ def hybrid_query(
 
             where_clause = "WHERE " + " AND ".join(sql_where_clauses) if sql_where_clauses else ""
 
+            limit_clause = f"LIMIT {limit}" if limit is not None else ""
+
             # Always calculate final_score
             sql_query = f"""
                 SELECT
@@ -96,7 +99,7 @@ def hybrid_query(
                 FROM events
                 {where_clause}
                 ORDER BY final_score DESC
-                LIMIT 5;
+                {limit_clause};
                 """
             
             print("─" * 80)
@@ -117,6 +120,20 @@ def hybrid_query(
     except Exception as e:
         print("❌ Hybrid query error:", e)
         return []
+
+def get_event_by_name(event_name: str):
+    """
+    Retrieves a single event by its exact name (case-insensitive).
+    """
+    try:
+        with engine.connect() as conn:
+            sql_query = text("SELECT * FROM events WHERE LOWER(name_of_event) = LOWER(:event_name)")
+            result = conn.execute(sql_query, {"event_name": event_name})
+            row = result.mappings().first()
+        return dict(row) if row else None
+    except Exception as e:
+        print("❌ Get event by name error:", e)
+        return None
 
 def query_fuzzy_event_name(text_query: str):
     try:

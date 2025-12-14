@@ -60,3 +60,24 @@ The admin panel for adding new events had several usability issues. It allowed a
 7. **Bug fix (`backend/query_pipeline.py`):**
     *   **Change:** Removed debugging `print` statement.
     *   **Reasoning:** The `AttributeError` was resolved, and the debugging `print` statement is no longer needed.
+
+**Update 2025-12-15 (Debugging)**
+
+**Feature:** Dynamic event retrieval and detailed event information.
+
+**Reasoning:**
+The previous implementation had limitations in event retrieval. General queries were limited to 5 events, and specific event queries did not return all details or unnecessarily included a relevance score.
+
+**Changes Made:**
+
+1.  **Dynamic Event Limit (`backend/retriever.py`, `backend/query_pipeline.py`):**
+    *   **Change:** Modified `hybrid_query` to accept an optional `limit` parameter. `handle_user_query` now passes `limit=None` for "all" or "summary" queries, otherwise it defaults to `5`.
+    *   **Reasoning:** To allow retrieval of all events for general queries while maintaining a concise limit for specific ones.
+
+2.  **Specific Event Retrieval (`backend/retriever.py`, `backend/query_pipeline.py`):**
+    *   **Change:** Added a new function `get_event_by_name` to `retriever.py` for exact-match searches. `handle_user_query` now attempts to use this function first for specific event queries.
+    *   **Reasoning:** To ensure that when a user asks for a specific event, all its details are returned accurately.
+
+3.  **Score Removal for Specific Events (`backend/query_pipeline.py`):**
+    *   **Change:** Modified the context formatting logic in `handle_user_query` to exclude the `final_score` when an exact event is retrieved.
+    *   **Reasoning:** The relevance score is not meaningful when an exact match is found.

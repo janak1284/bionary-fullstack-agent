@@ -109,11 +109,44 @@ def handle_user_query(question: str) -> str:
     if any(k in q for k in ["coordinate", "coordinator", "speaker", "who"]):
         person_name = extract_person_name(q)
 
-    # Call the hybrid query
+    # Attempt to find a specific event by name first
+    event = retriever_module.get_event_by_name(question)
+    if event:
+        # If a specific event is found, format its details directly
+        details = [f"## {event.get('name_of_event', 'N/A')}"]
+        if event.get('date_of_event'):
+            details.append(f"**Date:** {event['date_of_event']}")
+        if event.get('time_of_event'):
+            details.append(f"**Time:** {event['time_of_event']}")
+        if event.get('venue'):
+            details.append(f"**Venue:** {event['venue']}")
+        if event.get('mode_of_event'):
+            details.append(f"**Mode:** {event['mode_of_event']}")
+        if event.get('registration_fee') is not None:
+            details.append(f"**Registration Fee:** {event['registration_fee']}")
+        if event.get('speakers'):
+            details.append(f"**Speakers:** {event['speakers']}")
+        if event.get('faculty_coordinators'):
+            details.append(f"**Faculty Coordinators:** {event['faculty_coordinators']}")
+        if event.get('student_coordinators'):
+            details.append(f"**Student Coordinators:** {event['student_coordinators']}")
+        if event.get('perks'):
+            details.append(f"**Perks:** {event['perks']}")
+        if event.get('collaboration'):
+            details.append(f"**Collaboration:** {event['collaboration']}")
+        if event.get('description_insights'):
+            details.append(f"**Description:** {event['description_insights']}")
+        
+        context = "\n".join(details)
+        return gemini_answer(question, context)
+
+    # If no specific event is found, proceed with the hybrid search
+    limit = None if "all" in q or "summary" in q else 5
     results = retriever_module.hybrid_query(
         user_query=question,
         date_filter=date_filter if date_filter != "NOW()" else None,
         fee_filter=fee_filter if fee_filter != 5000 else None,
+        limit=limit,
     )
 
     if not results:
@@ -145,7 +178,7 @@ def handle_user_query(question: str) -> str:
             details.append(f"**Collaboration:** {event['collaboration']}")
         if event.get('description_insights'):
             details.append(f"**Description:** {event['description_insights']}")
-        if event.get('final_score'):
+        if 'final_score' in event:
             details.append(f"**Relevance Score:** {event['final_score']:.2f}")
         context_parts.append("\n".join(details))
 
