@@ -1,63 +1,58 @@
 import os
+import re
 from dotenv import load_dotenv
 from sqlalchemy import text
 from sentence_transformers import SentenceTransformer
 import numpy as np
-
 from typing import Optional
-
 from database import engine
 
 load_dotenv()
 
-# Embedding Model
 model = SentenceTransformer(
     "BAAI/bge-base-en-v1.5",
     trust_remote_code=True
 )
 
-# Hybrid Query
+def normalize_text(text: str) -> str:
+    text = text.lower().strip()
+    text = re.sub(r'(.)\1+', r'\1', text)
+    return text
+
 def hybrid_query(
     user_query: str,
     date_filter: Optional[str] = None,
     fee_filter: Optional[int] = None,
-    vector_weight: float = 0.7,
-    trigram_weight: float = 0.3,
+    vector_weight: float = 0.4,
+    trigram_weight: float = 0.6,
     vector_threshold: float = 0.7,
     limit: Optional[int] = 5,
     fuzzy_query: Optional[str] = None,
 ):
-    """
-    Performs a hybrid search on the events table using a combination of
-    hard filters, vector search, and trigram fuzzy search.
-    """
     try:
-        # 1. Get embedding for the user query
+        user_query = normalize_text(user_query)
+        fuzzy_query = normalize_text(fuzzy_query) if fuzzy_query else user_query
+
         embedding = model.encode(user_query)
         if isinstance(embedding, np.ndarray):
             embedding = embedding.tolist()
 
-        # Convert the list to a string representation of a vector
         user_vector_str = "[" + ",".join(map(str, embedding)) + "]"
 
-        # 2. Construct and execute the hybrid SQL query
         with engine.connect() as conn:
-            # Set a lower threshold for fuzzy matching to catch typos like "jefery"
-            conn.execute(text("SET pg_trgm.word_similarity_threshold = 0.3;"))
+            conn.execute(text("SET pg_trgm.similarity_threshold = 0.15;"))
 
             sql_where_clauses = []
             sql_params = {
-                "user_query": fuzzy_query if fuzzy_query else user_query,
-                "user_vector": user_vector_str,  # Pass the string representation
+                "user_query": fuzzy_query,
+                "user_vector": user_vector_str,
                 "vector_weight": vector_weight,
                 "trigram_weight": trigram_weight,
                 "vector_threshold": vector_threshold,
             }
 
             if date_filter:
-                if date_filter == "NOW()":
-                    sql_where_clauses.append("date_of_event > NOW()")
-                elif "BETWEEN" in date_filter:
+                if "BETWEEN" in date_filter:
                     sql_where_clauses.append(date_filter)
                 else:
                     sql_where_clauses.append(f"date_of_event > '{date_filter}'")
@@ -68,18 +63,19 @@ def hybrid_query(
                 else:
                     sql_where_clauses.append(f"registration_fee <= {fee_filter}")
 
-            # Always include fuzzy and vector search
-            search_clauses = [
-                ":user_query <% LOWER(search_text)",
-                "embedding <=> :user_vector < :vector_threshold",
-            ]
-            sql_where_clauses.append(f"({' OR '.join(search_clauses)})")
+            search_clause = """
+            (
+                similarity(:user_query, LOWER(search_text)) > 0.15
+                OR LOWER(search_text) ILIKE '%' || :user_query || '%'
+                OR embedding <=> :user_vector < :vector_threshold
+            )
+            """
 
-            where_clause = "WHERE " + " AND ".join(sql_where_clauses) if sql_where_clauses else ""
+            sql_where_clauses.append(search_clause)
 
-            limit_clause = f"LIMIT {limit}" if limit is not None else ""
+            where_clause = "WHERE " + " AND ".join(sql_where_clauses)
+            limit_clause = f"LIMIT {limit}" if limit else ""
 
-            # Always calculate final_score
             sql_query = f"""
                 SELECT
                     name_of_event,
@@ -95,95 +91,58 @@ def hybrid_query(
                     perks,
                     collaboration,
                     description_insights,
-                    ( (1 - (embedding <=> :user_vector)) * :vector_weight ) + ( word_similarity(:user_query, LOWER(search_text)) * :trigram_weight ) as final_score
+                    (
+                        (1 - (embedding <=> :user_vector)) * :vector_weight
+                        + similarity(:user_query, LOWER(search_text)) * :trigram_weight
+                    ) AS final_score
                 FROM events
                 {where_clause}
                 ORDER BY final_score DESC
                 {limit_clause};
-                """
-            
-            print("-" * 80)
-            print("HYBRID SEARCH (VECTOR + TRIGRAM)")
-            print(sql_query)
-            print("-" * 80)
+            """
 
-            sql = text(sql_query)
-            result = conn.execute(sql, sql_params)
-            rows = result.mappings().fetchall()  # Use mappings to get dicts
+            result = conn.execute(text(sql_query), sql_params)
+            rows = result.mappings().fetchall()
 
-        if not rows:
-            return []
-
-        # Convert rows to a list of dictionaries
-        return [dict(row) for row in rows]
+        return [dict(row) for row in rows] if rows else []
 
     except Exception as e:
         print("Hybrid query error:", e)
         return []
 
 def get_event_by_name(event_name: str):
-    """
-    Retrieves a single event by its exact name (case-insensitive).
-    """
     try:
+        event_name = normalize_text(event_name)
         with engine.connect() as conn:
-            sql_query = text("SELECT * FROM events WHERE LOWER(name_of_event) = LOWER(:event_name)")
-            result = conn.execute(sql_query, {"event_name": event_name})
+            result = conn.execute(
+                text(
+                    "SELECT * FROM events WHERE normalize(name_of_event) = :event_name"
+                ),
+                {"event_name": event_name},
+            )
             row = result.mappings().first()
         return dict(row) if row else None
     except Exception as e:
         print("Get event by name error:", e)
         return None
 
-def query_fuzzy_event_name(text_query: str):
-    try:
-        with engine.connect() as conn:
-            result = conn.execute(
-                text("""
-                    SELECT
-                        name_of_event,
-                        event_domain,
-                        date_of_event,
-                        time_of_event,
-                        venue,
-                        description_insights,
-                        similarity(name_of_event, :q) AS score
-                    FROM events
-                    ORDER BY score DESC
-                    LIMIT 3
-                """),
-                {"q": text_query},
-            )
-            rows = result.fetchall()
-
-        return [
-            f"{r[0]}\n"
-            f"Domain: {r[1]}\n"
-            f"Date: {r[2]}\n"
-            f"Time: {r[3]}\n"
-            f"Venue: {r[4]}\n"
-            f"Details: {r[5]}"
-            for r in rows
-        ] if rows else []
-
-    except Exception:
-        return []
-
-# Insert New Event
 def add_new_event(form_data: dict):
     try:
-        search_text = (
+        search_text = normalize_text(
             f"{form_data.get('name_of_event', '')} "
             f"{form_data.get('event_domain', '')} "
             f"{form_data.get('description_insights', '')} "
-            f"{form_data.get('perks', '')}"
+            f"{form_data.get('perks', '')} "
+            f"{form_data.get('speakers', '')} "
+            f"{form_data.get('faculty_coordinators', '')} "
+            f"{form_data.get('student_coordinators', '')}"
         )
 
         embedding = model.encode(search_text)
         if isinstance(embedding, np.ndarray):
             embedding = embedding.tolist()
 
-        with engine.begin() as conn:  # auto-commit
+        with engine.begin() as conn:
             conn.execute(
                 text(
                     """
